@@ -1,0 +1,85 @@
+# Python
+############################
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+*.env # Local .env files for environment variables
+.env.* # Other .env related files (e.g., .env.development)
+.python-version # pyenv
+
+# Operating System Files
+############################
+.DS_Store # macOS
+.localized # macOS
+Thumbs.db # Windows
+Desktop.ini # Windows
+
+# Database Files
+############################
+*.sqlite3
+*.db
+*.db-* # For other database files like PostgreSQL logs, if any.
+
+# Media and Static Files
+############################
+# User-uploaded media files
+/media/
+
+# Collected static files (usually created by 'collectstatic')
+/staticfiles/
+# Or if you use a different name for your staticfiles directory, specify it:
+# /my_static_root/
+
+# IDE and Editor Files
+############################
+.idea/             # JetBrains IDEs (PyCharm, IntelliJ)
+.vscode/           # VS Code (settings and extensions)
+*.sublime-project
+*.sublime-workspace
+.project           # Eclipse
+.tmproject
+.c9/               # Cloud9 IDE
+
+# Build/Distro Files
+############################
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Testing and Coverage
+############################
+.coverage
+.coverage.*
+.pytest_cache/
+htmlcov/
+.nox/
+
+# Logs and Temporary Files
+############################
+*.log
+*.tmp
+*.bak
+*.swp
+*~
+.nfs* # For NFS mounts
+
+# Django-specific temporary files
+# Example: if you use a specific temporary directory for file uploads
+# /tmp_uploads/
+
+# Jupyter Notebook files (if you use them for prototyping/analysis)
+.ipynb_checkpoints/
+
+# Other sensitive files or custom exclusions
+############################
+# For example, if you have specific config files you don't want to commit:
+# my_secret_config.json
+# production_settings.py
+
+# If you manage npm packages for frontend in the same repo (e.g., in a staticfiles folder)
+# node_modules/

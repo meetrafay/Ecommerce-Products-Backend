@@ -1,0 +1,26 @@
+from django.db import models
+
+class Product(models.Model):
+    """
+    Model representing a product in the inventory.
+    
+    Attributes:
+        name (str): The name of the product.
+        sku (str): Unique Stock Keeping Unit identifier.
+        price (Decimal): Price of the product.
+        quantity (int): Available inventory quantity.
+        last_updated (datetime): Timestamp of the last update.
+    """
+    name = models.CharField(max_length=255, help_text="Name of the product")
+    sku = models.CharField(max_length=50, unique=True, help_text="Unique SKU for the product")
+    price = models.DecimalField(max_digits=10, decimal_places=2, help_text="Price of the product")
+    quantity = models.PositiveIntegerField(default=0, help_text="Available quantity in inventory")
+    last_updated = models.DateTimeField(auto_now=True, help_text="Last updated timestamp")
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Product'
+        verbose_name_plural = 'Products'
+
+    def __str__(self):
+        return f"{self.name} ({self.sku})"
