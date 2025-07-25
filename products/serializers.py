@@ -28,3 +28,24 @@ class ProductSerializer(serializers.ModelSerializer):
         if value < 0:
             raise serializers.ValidationError("Quantity cannot be negative.")
         return value
+    
+
+class ShopifyWebhookSerializer(serializers.Serializer):
+    """
+    Serializer for Shopify inventory update webhook payload.
+    Validates SKU and inventory quantity.
+    """
+    sku = serializers.CharField(max_length=50)
+    inventory_quantity = serializers.IntegerField()
+
+    def validate_sku(self, value):
+        """Ensure SKU exists in the database."""
+        if not Product.objects.filter(sku=value).exists():
+            raise serializers.ValidationError("Product with this SKU does not exist.")
+        return value
+
+    def validate_inventory_quantity(self, value):
+        """Ensure inventory quantity is non-negative."""
+        if value < 0:
+            raise serializers.ValidationError("Inventory quantity cannot be negative.")
+        return value

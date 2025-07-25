@@ -1,3 +1,4 @@
+from authentication.models import Profile
 from django.db import models
 
 class Product(models.Model):
@@ -11,6 +12,10 @@ class Product(models.Model):
         quantity (int): Available inventory quantity.
         last_updated (datetime): Timestamp of the last update.
     """
+    i_profile = models.ForeignKey(
+        Profile,
+        on_delete=models.SET_NULL,
+        null=True, help_text="User profile that created the product")
     name = models.CharField(max_length=255, help_text="Name of the product")
     sku = models.CharField(max_length=50, unique=True, help_text="Unique SKU for the product")
     price = models.DecimalField(max_digits=10, decimal_places=2, help_text="Price of the product")
