@@ -4,7 +4,7 @@ from celery import chain
 from celery import shared_task
 from django.core.mail import send_mail
 from django.conf import settings
-from .models import Product
+from .models import Product, StockHistory
 from .serializers import ShopifyWebhookSerializer
 
 @shared_task
@@ -40,6 +40,7 @@ def validate_and_update_inventory(product_data):
             try:
                 product = Product.objects.get(sku=sku)
                 old_quantity = product.quantity
+                StockHistory.objects.create(product=product, quantity=inventory_quantity)
                 product.quantity = inventory_quantity
                 product.save()
                 results.append({

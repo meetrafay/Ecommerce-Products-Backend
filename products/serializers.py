@@ -49,3 +49,16 @@ class ShopifyWebhookSerializer(serializers.Serializer):
         if value < 0:
             raise serializers.ValidationError("Inventory quantity cannot be negative.")
         return value
+    
+    
+class ProductDiscountSerializer(serializers.Serializer):
+    """
+    Serializer for adding or updating a product discount.
+    """
+    discount_percentage = serializers.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        min_value=0, 
+        max_value=100,
+        help_text="Discount percentage (0-100)"
+    )

@@ -1,3 +1,5 @@
+from datetime import timedelta
+from django.utils import timezone
 import numpy as np
 from rest_framework import generics, status
 from rest_framework.views import APIView
@@ -11,8 +13,8 @@ import hashlib
 import base64
 
 from sentence_transformers import SentenceTransformer
-from .models import Product
-from .serializers import ProductSerializer, ShopifyWebhookSerializer
+from .models import Product, StockHistory
+from .serializers import ProductDiscountSerializer, ProductSerializer, ShopifyWebhookSerializer
 from .filters import ProductFilter
 from .permissions import IsInventoryManager
 from django.core.cache import cache
@@ -69,6 +71,7 @@ class ShopifyInventoryWebhookView(APIView):
             sku = serializer.validated_data['sku']
             inventory_quantity = serializer.validated_data['inventory_quantity']
             product = Product.objects.get(sku=sku)
+            StockHistory.objects.create(product=product, quantity=inventory_quantity)
             product.quantity = inventory_quantity
             product.save()
             return Response({'status': 'Inventory updated successfully'}, status=status.HTTP_200_OK)
@@ -118,3 +121,90 @@ class ProductSearchView(generics.ListAPIView):
         # Sort by similarity (descending) and filter out low scores
         results.sort(key=lambda x: x[1], reverse=True)
         return [product for product, similarity in results if similarity > 0.1]  # Threshold for relevance
+    
+    
+
+class ProductInsightsView(APIView):
+    """
+    API endpoint for inventory insights.
+    Returns basic statistics and trending products based on stock changes.
+    """
+    # permission_classes = [IsInventoryManager]
+
+    def get(self, request, *args, **kwargs):
+        cache_key = 'product_insights'
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Response(cached_data)
+
+        # Basic statistics
+        total_products = Product.objects.count()
+        low_stock_threshold = 10
+        low_stock_products = Product.objects.filter(quantity__lt=low_stock_threshold).count()
+        low_stock_percentage = (low_stock_products / total_products * 100) if total_products > 0 else 0
+
+        # Trending products (quantity decreased by >20% in last 7 days)
+        seven_days_ago = timezone.now() - timedelta(days=7)
+        trending_products = []
+        products = Product.objects.all()
+        for product in products:
+            history = product.stock_history.filter(timestamp__gte=seven_days_ago).order_by('timestamp')
+            if history.count() >= 2:
+                oldest = history.first().quantity
+                newest = history.last().quantity
+                if oldest > 0:
+                    percentage_change = ((newest - oldest) / oldest) * 100
+                    if percentage_change <= -20:  # Significant decrease
+                        trending_products.append({
+                            'name': product.name,
+                            'sku': product.sku,
+                            'quantity_change': newest - oldest,
+                            'percentage_change': round(percentage_change, 2)
+                        })
+
+        response_data = {
+            'statistics': {
+                'total_products': total_products,
+                'low_stock_products': low_stock_products,
+                'low_stock_percentage': round(low_stock_percentage, 2)
+            },
+            'trending_products': trending_products
+        }
+
+        # Cache for 1 hour
+        cache.set(cache_key, response_data, timeout=3600)
+        return Response(response_data)
+    
+    
+class ProductDiscountView(generics.GenericAPIView):
+    """
+    API endpoint to add or update a discount percentage for a product.
+    """
+    serializer_class = ProductDiscountSerializer
+    permission_classes = [IsInventoryManager]
+
+    def post(self, request, pk, *args, **kwargs):
+        """
+        Set or update the discount percentage for a product.
+        """
+        try:
+            product = Product.objects.get(pk=pk)
+        except Product.DoesNotExist:
+            return Response({'error': 'Product not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            product.discount_percentage = serializer.validated_data['discount_percentage']
+            product.save()
+
+            # Clear cached product data
+            cache_key = f"product_embedding_{product.sku}"
+            cache.delete(cache_key)
+            cache_key_insights = 'product_insights'
+            cache.delete(cache_key_insights)
+            cache_key_trends = 'trending_products'
+            cache.delete(cache_key_trends)
+
+            # Return updated product
+            return Response(ProductSerializer(product).data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
