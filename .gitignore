@@ -7,6 +7,7 @@ __pycache__/
 .Python
 env/
 venv/
+/.env
 *.env # Local .env files for environment variables
 .env.* # Other .env related files (e.g., .env.development)
 .python-version # pyenv
