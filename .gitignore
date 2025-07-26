@@ -9,6 +9,7 @@ env/
 venv/
 *.env # Local .env files for environment variables
 .env.* # Other .env related files (e.g., .env.development)
+.env
 .python-version # pyenv
 
 # Operating System Files

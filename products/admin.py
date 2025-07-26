@@ -8,7 +8,7 @@ class ProductAdmin(admin.ModelAdmin):
     """
     Admin interface for Product model with advanced filtering and bulk price update actions.
     """
-    list_display = ('name', 'sku', 'price', 'quantity', 'last_updated', 'i_profile')
+    list_display = ('name', 'sku', 'price', 'quantity', 'last_updated', 'i_profile', 'embedding')
     list_filter = (
         'sku',
         'name',

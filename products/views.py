@@ -16,6 +16,8 @@ from .serializers import ProductSerializer, ShopifyWebhookSerializer
 from .filters import ProductFilter
 from .permissions import IsInventoryManager
 from django.core.cache import cache
+
+
 class ProductListCreateView(generics.ListCreateAPIView):
     """
     API endpoint for listing and creating products.
@@ -79,7 +81,7 @@ class ProductSearchView(generics.ListAPIView):
     Ranks results by similarity to the query (?q=...).
     """
     serializer_class = ProductSerializer
-    permission_classes = [IsInventoryManager]
+    # permission_classes = [IsInventoryManager]
 
     def get_queryset(self):
         query = self.request.query_params.get('q', '')
