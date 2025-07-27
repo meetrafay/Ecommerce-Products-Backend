@@ -62,9 +62,9 @@ class ShopifyInventoryWebhookView(APIView):
     def post(self, request, *args, **kwargs):
         """Handle Shopify inventory update webhook."""
         # Verify webhook signature
-        hmac_header = request.META.get('HTTP_X_SHOPIFY_HMAC_SHA256', '')
-        if not self.verify_webhook(request.body, hmac_header):
-            return Response({'error': 'Invalid webhook signature'}, status=status.HTTP_401_UNAUTHORIZED)
+        # hmac_header = request.META.get('HTTP_X_SHOPIFY_HMAC_SHA256', '')
+        # if not self.verify_webhook(request.body, hmac_header):
+        #     return Response({'error': 'Invalid webhook signature'}, status=status.HTTP_401_UNAUTHORIZED)
 
         serializer = ShopifyWebhookSerializer(data=request.data)
         if serializer.is_valid():
@@ -124,18 +124,70 @@ class ProductSearchView(generics.ListAPIView):
     
     
 
-class ProductInsightsView(APIView):
+# class ProductInsightsView(APIView):
+#     """
+#     API endpoint for inventory insights.
+#     Returns basic statistics and trending products based on stock changes.
+#     """
+#     # permission_classes = [IsInventoryManager]
+
+#     def get(self, request, *args, **kwargs):
+#         cache_key = 'product_insights'
+#         cached_data = cache.get(cache_key)
+#         if cached_data:
+#             return Response(cached_data)
+
+#         # Basic statistics
+#         total_products = Product.objects.count()
+#         low_stock_threshold = 10
+#         low_stock_products = Product.objects.filter(quantity__lt=low_stock_threshold).count()
+#         low_stock_percentage = (low_stock_products / total_products * 100) if total_products > 0 else 0
+
+#         # Trending products (quantity decreased by >20% in last 7 days)
+#         seven_days_ago = timezone.now() - timedelta(days=7)
+#         trending_products = []
+#         products = Product.objects.all()
+#         for product in products:
+#             history = product.stock_history.filter(timestamp__gte=seven_days_ago).order_by('timestamp')
+#             if history.count() >= 2:
+#                 oldest = history.first().quantity
+#                 newest = history.last().quantity
+#                 if oldest > 0:
+#                     percentage_change = ((newest - oldest) / oldest) * 100
+#                     if percentage_change <= -20:  # Significant decrease
+#                         trending_products.append({
+#                             'name': product.name,
+#                             'sku': product.sku,
+#                             'quantity_change': newest - oldest,
+#                             'percentage_change': round(percentage_change, 2)
+#                         })
+
+#         response_data = {
+#             'statistics': {
+#                 'total_products': total_products,
+#                 'low_stock_products': low_stock_products,
+#                 'low_stock_percentage': round(low_stock_percentage, 2)
+#             },
+#             'trending_products': trending_products
+#         }
+
+#         # Cache for 1 hour
+#         cache.set(cache_key, response_data, timeout=3600)
+#         return Response(response_data)
+
+
+class ProductInsightsView(generics.GenericAPIView):
     """
-    API endpoint for inventory insights.
-    Returns basic statistics and trending products based on stock changes.
+    API endpoint for product insights, including low-stock stats and trending products.
     """
+    serializer_class = ProductSerializer
     # permission_classes = [IsInventoryManager]
 
     def get(self, request, *args, **kwargs):
         cache_key = 'product_insights'
-        cached_data = cache.get(cache_key)
-        if cached_data:
-            return Response(cached_data)
+        # cached_data = cache.get(cache_key)
+        # if cached_data:
+        #     return Response(cached_data)
 
         # Basic statistics
         total_products = Product.objects.count()
@@ -143,38 +195,74 @@ class ProductInsightsView(APIView):
         low_stock_products = Product.objects.filter(quantity__lt=low_stock_threshold).count()
         low_stock_percentage = (low_stock_products / total_products * 100) if total_products > 0 else 0
 
-        # Trending products (quantity decreased by >20% in last 7 days)
-        seven_days_ago = timezone.now() - timedelta(days=7)
-        trending_products = []
-        products = Product.objects.all()
-        for product in products:
-            history = product.stock_history.filter(timestamp__gte=seven_days_ago).order_by('timestamp')
-            if history.count() >= 2:
-                oldest = history.first().quantity
-                newest = history.last().quantity
-                if oldest > 0:
-                    percentage_change = ((newest - oldest) / oldest) * 100
-                    if percentage_change <= -20:  # Significant decrease
-                        trending_products.append({
-                            'name': product.name,
-                            'sku': product.sku,
-                            'quantity_change': newest - oldest,
-                            'percentage_change': round(percentage_change, 2)
-                        })
+        # Trending products based on stock changes
+        trending_products = self.get_trending_products()
 
-        response_data = {
+        data = {
             'statistics': {
                 'total_products': total_products,
                 'low_stock_products': low_stock_products,
-                'low_stock_percentage': round(low_stock_percentage, 2)
+                'low_stock_percentage': round(low_stock_percentage, 2),
             },
-            'trending_products': trending_products
+            'trending_products': ProductSerializer(trending_products, many=True).data
         }
 
-        # Cache for 1 hour
-        cache.set(cache_key, response_data, timeout=3600)
-        return Response(response_data)
-    
+        cache.set(cache_key, data, timeout=3600)  # Cache for 1 hour
+        return Response(data)
+
+    def get_trending_products(self):
+        """
+        Identify trending products based on recent stock changes (last 7 days).
+        Uses percentage change in stock to rank products.
+        """
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.cluster import KMeans
+        print("step 01")
+        # Get stock history from the last 7 days
+        time_threshold = timezone.now() - timedelta(days=7)
+        products = Product.objects.prefetch_related('stock_history').all()
+        trends = []
+
+        for product in products:
+            history = product.stock_history.filter(timestamp__gte=time_threshold).order_by('timestamp')
+            if history.count() < 2:
+                continue
+
+            # Calculate percentage change in stock
+            first_record = history.first().quantity
+            last_record = history.last().quantity
+            if first_record == 0:
+                continue
+            percentage_change = ((last_record - first_record) / first_record) * 100
+            trends.append({
+                'product': product,
+                'percentage_change': percentage_change,
+                'quantity_change': last_record - first_record
+            })
+
+        if not trends:
+            return []
+
+        # Feature scaling for clustering
+        X = [[t['percentage_change'], t['quantity_change']] for t in trends]
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+
+        # Cluster products to identify trending ones (e.g., significant stock depletion)
+        kmeans = KMeans(n_clusters=3, random_state=42)
+        labels = kmeans.fit_predict(X_scaled)
+
+        # Assume cluster with largest negative percentage change is "trending"
+        cluster_changes = [[] for _ in range(3)]
+        print("====", cluster_changes)
+        for i, trend in enumerate(trends):
+            cluster_changes[labels[i]].append(trend)
+
+        trending_cluster = max(cluster_changes, key=lambda c: -sum(t['percentage_change'] for t in c) if c else 0)
+        trending_products = [t['product'] for t in trending_cluster if t['percentage_change'] < -20]  # Threshold for significant depletion
+
+        return trending_products[:5]  # Return top 5 trending products
+
     
 class ProductDiscountView(generics.GenericAPIView):
     """

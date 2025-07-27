@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.admin import DateFieldListFilter
 from django.db.models import F  # Import F for database-level operations
-from .models import Product
+from .models import Product, StockHistory
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
@@ -38,3 +38,12 @@ class ProductAdmin(admin.ModelAdmin):
         self.message_user(request, f"{updated} products' prices decreased by 10%%.")  # Escape % with %%
 
     decrease_price_10_percent.short_description = "Decrease selected products' prices by 10%%"  # Escape % with %%
+    
+@admin.register(StockHistory)
+class StockHistoryAdmin(admin.ModelAdmin):
+    """
+    Admin interface for StockHistory model.
+    Displays stock changes with timestamps.
+    """
+    list_display = ('product', 'quantity', 'timestamp')
+
