@@ -10,8 +10,9 @@ class ProductSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Product
-        fields = ['id', 'name', 'sku', 'price', 'quantity', 'last_updated', 'discounted_price']
-        read_only_fields = ['id', 'last_updated', 'created_by', 'discounted_price']
+        fields = ['id', 'name', 'sku', 'price', 'quantity', 'last_updated', 'discounted_price', 
+                  'discount_percentage']
+        read_only_fields = ['id', 'last_updated', 'i_profile', 'discounted_price']
 
     def validate_sku(self, value):
         """Ensure SKU is unique and not empty."""

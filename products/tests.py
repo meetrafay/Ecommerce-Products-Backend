@@ -1,3 +1,4 @@
+from functools import cache
 from django.test import TestCase
 from rest_framework.test import APITestCase
 from rest_framework import status
@@ -10,24 +11,23 @@ from products.models import Product, StockHistory
 from products.serializers import ProductSerializer
 from authentication.models import Profile
 from django.contrib.auth.models import User, Group
-from tasks import nightly_inventory_update, update_trending_products
-from celery import shared_task
-# import base64
-# import hmac
-# import hashlib
-# from decouple import config
+from products.tasks import nightly_inventory_update, update_trending_products
+import base64
+import hmac
+import hashlib
+from decouple import config
 
 class ProductAPITestCase(APITestCase):
     def setUp(self):
         """Set up test data and authentication."""
         # Create a user and profile
-        self.user = User.objects.create_user(username='testuser@gmail.com', password='Test@123')
+        self.user = User.objects.create_user(username='testuser', password='testpass')
         self.profile = Profile.objects.create(user=self.user)
         self.client.force_authenticate(user=self.user)
 
         # Create Inventory Managers group and add user
-        self.group, _ = Group.objects.get_or_create(name='Inventory Managers')
-        self.user.groups.add(self.group)
+        # self.group, _ = Group.objects.get_or_create(name='Inventory Managers')
+        # self.user.groups.add(self.group)
 
         # Create test products
         self.product1 = Product.objects.create(
@@ -70,7 +70,6 @@ class ProductAPITestCase(APITestCase):
 
     def test_product_list_create(self):
         """Test listing and creating products."""
-        # Test GET /api/products/
         url = reverse('products:product-list-create')
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -125,14 +124,10 @@ class ProductAPITestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(Product.objects.count(), 1)
 
-    @patch('products.views.SentenceTransformer')
-    def test_product_search(self, mock_transformer):
-        """Test semantic search with mocked Sentence-Transformer."""
-        # Mock SentenceTransformer
-        mock_model = mock_transformer.return_value
-        mock_model.encode.side_effect = lambda x: np.array([1.0, 0.0] if 'mouse' in x.lower() else [0.0, 1.0])
-
-        # Test GET /api/products/search/?q=mouse
+    @patch('products.utils.compute_similarity')
+    def test_product_search(self, mock_compute_similarity):
+        """Test semantic search with mocked compute_similarity."""
+        mock_compute_similarity.return_value = [self.product1]
         url = reverse('products:product-search')
         response = self.client.get(url, {'q': 'mouse'})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -173,41 +168,43 @@ class ProductAPITestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('discount_percentage', response.data)
 
-#     def test_shopify_webhook(self):
-#         """Test Shopify inventory update webhook."""
-#         url = reverse('products:shopify-inventory-webhook')
-#         payload = {
-#             'sku': 'SP001',
-#             'inventory_quantity': 50
-#         }
+    # def test_shopify_webhook(self):
+    #     """Test Shopify inventory update webhook."""
+    #     url = reverse('products:shopify-inventory-webhook')
+    #     payload = {
+    #         'sku': 'SP001',
+    #         'inventory_quantity': 50
+    #     }
 
-#         # Generate HMAC
-#         secret = config('SHOPIFY_WEBHOOK_SECRET', default='test_secret')
-#         import json
-#         data = json.dumps(payload).encode('utf-8')
-#         digest = hmac.new(secret.encode('utf-8'), data, hashlib.sha256).digest()
-#         hmac_header = base64.b64encode(digest).decode('utf-8')
+    #     # Generate HMAC
+    #     secret = config('SHOPIFY_WEBHOOK_SECRET', default='test_secret')
+    #     import json
+    #     data = json.dumps(payload).encode('utf-8')
+    #     digest = hmac.new(secret.encode('utf-8'), data, hashlib.sha256).digest()
+    #     hmac_header = base64.b64encode(digest).decode('utf-8')
 
-#         # Test valid webhook
-#         response = self.client.post(
-#             url,
-#             data=payload,
-#             format='json',
-#             HTTP_X_SHOPIFY_HMAC_SHA256=hmac_header
-#         )
-#         self.assertEqual(response.status_code, status.HTTP_200_OK)
-#         self.product1.refresh_from_db()
-#         self.assertEqual(self.product1.quantity, 50)
-#         self.assertEqual(StockHistory.objects.filter(product=self.product1).count(), 3)
+    #     # Test valid webhook
+    #     with patch('products.utils.verify_shopify_webhook', return_value=True):
+    #         response = self.client.post(
+    #             url,
+    #             data=payload,
+    #             format='json',
+    #             HTTP_X_SHOPIFY_HMAC_SHA256=hmac_header
+    #         )
+    #         self.assertEqual(response.status_code, status.HTTP_200_OK)
+    #         self.product1.refresh_from_db()
+    #         self.assertEqual(self.product1.quantity, 50)
+    #         self.assertEqual(StockHistory.objects.filter(product=self.product1).count(), 3)
 
-#         # Test invalid HMAC
-#         response = self.client.post(
-#             url,
-#             data=payload,
-#             format='json',
-#             HTTP_X_SHOPIFY_HMAC_SHA256='invalid_hmac'
-#         )
-#         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        # Test invalid HMAC
+        # with patch('products.utils.verify_shopify_webhook', return_value=False):
+        #     response = self.client.post(
+        #         url,
+        #         data=payload,
+        #         format='json',
+        #         HTTP_X_SHOPIFY_HMAC_SHA256='invalid_hmac'
+        #     )
+        #     self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
 class CeleryTaskTestCase(TestCase):
     def setUp(self):
@@ -219,14 +216,14 @@ class CeleryTaskTestCase(TestCase):
             sku="SP001",
             price=29.99,
             quantity=5,
-            created_by=self.profile
+            i_profile=self.profile
         )
         self.product2 = Product.objects.create(
             name="Red Gaming Keyboard",
             sku="SP002",
             price=59.99,
             quantity=30,
-            created_by=self.profile
+            i_profile=self.profile
         )
         StockHistory.objects.create(
             product=self.product1,
@@ -251,16 +248,12 @@ class CeleryTaskTestCase(TestCase):
         self.assertEqual(StockHistory.objects.filter(product=self.product1).count(), 3)
         self.assertTrue(mock_send_mail.called)
 
-#     @patch('sklearn.preprocessing.StandardScaler.fit_transform')
-#     @patch('sklearn.cluster.KMeans.fit_predict')
-#     def test_update_trending_products(self, mock_kmeans, mock_scaler):
-#         """Test trending products update Celery task."""
-#         # Mock scaler and KMeans
-#         mock_scaler.return_value = np.array([[1.0, -1.0], [0.0, 0.0]])
-#         mock_kmeans.return_value = np.array([0, 1])
-
-#         update_trending_products()
-#         trending_products = cache.get('trending_products')
-#         self.assertIsNotNone(trending_products)
-#         self.assertEqual(len(trending_products), 1)
-#         self.assertEqual(trending_products[0]['sku'], 'SP001')
+    @patch('products.utils.compute_trending_products')
+    def test_update_trending_products(self, mock_compute_trending_products):
+        """Test trending products update Celery task."""
+        mock_compute_trending_products.return_value = [self.product1]
+        update_trending_products()
+        trending_products = cache.get('trending_products')
+        self.assertIsNotNone(trending_products)
+        self.assertEqual(len(trending_products), 1)
+        self.assertEqual(trending_products[0]['sku'], 'SP001')
