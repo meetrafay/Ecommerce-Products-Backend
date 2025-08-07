@@ -13,13 +13,20 @@ class SignupView(generics.CreateAPIView):
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = serializer.save()
-        return Response({
-            'user': UserSerializer(user).data,
-            'token': create_token(user),
-            'message': 'User created successfully.'
-        }, status=status.HTTP_201_CREATED)
+        if serializer.is_valid():
+            user = serializer.save()
+            return Response({
+                'user': {
+                    'id': user.id,
+                    'username': user.first_name,
+                    'email': user.email,
+                    'profile_pic': user.profile.profile_pic.url if user.profile.profile_pic else None
+                },
+                    
+                'token': create_token(user),
+                'message': 'User created successfully.'
+            }, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class LoginView(generics.GenericAPIView):
     """
@@ -34,6 +41,11 @@ class LoginView(generics.GenericAPIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data
         return Response({
-            'user': UserSerializer(user).data,
+            'user': {
+                'id': user.id,
+                'username': user.first_name,
+                'email': user.email,
+                'profile_pic': user.profile.profile_pic.url if user.profile.profile_pic else None
+            },
             'token': create_token(user),
         }, status=status.HTTP_200_OK)

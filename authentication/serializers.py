@@ -25,7 +25,17 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'email', 'password', 'profile_pic']
         extra_kwargs = {
             'password': {'write_only': True},
+            'email': {'required': True, 'allow_blank': False},
+            'username': {'required': True, 'allow_blank': False},
         }
+
+    def validate_email(self, value):
+        """
+        Validate that the email is unique.
+        """
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("Email already exists.")
+        return value
 
     def create(self, validated_data):
         print(validated_data)
